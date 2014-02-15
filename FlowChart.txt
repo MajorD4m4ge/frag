@@ -1,0 +1,70 @@
++----------------------------+
+|         Start              |
+|----------------------------|      +-------------------------+
+|                            |      | Errors:                 |
+|                            |      |   Missing File          |
+|   Parse Command Line       +----->|   Missing Volume        |
+|                            |      |   File length too small |
+|                            |      |                         |
+|                            |      |                         |
++-------------+--------------+      +-------------------------+
+              |
+              |
+              v
++----------------------------+      +-------------------------+
+|      Call BootSec          |      | Errors:                 |
+|----------------------------|      |   Properly Formatted?   |
+|                            |      |                         |
+|   Inspect Boot Sector      +----->|                         |
+|                            |      |                         |
+|                            |      |                         |
++-------------+--------------+      +-------------------------+
+              |
+              |
+              v
++----------------------------+
+|      Call FileInfo         |
+|----------------------------|
+|                            |
+|  Get File Information      |
+|  Get Chunks of File        |
+|  Read Chunks --> Vars      |
++-------------+--------------+
+              |
+              |
+              v
++----------------------------+
+|      Call FatInfo          |
+|----------------------------|
+|  Find cluster(2 unalloc)   |
+|  Store first cluster       |
+|  Find 2 free clusters      |
+|  Loop for all chunks       |
+|  Write cluster chain       |
+|  Verify                    |
++-------------+--------------+
+              |
+              |
+              v
++----------------------------+
+|     Call RootDir           |
+|----------------------------|
+|  Find free directory       |
+|  Write Data:               |
+|    Filename                |
+|    File Info (Date, A, ..) |
+|    First cluster           |
+|    File Size               |
++-------------+--------------+
+              |
+              |
+              v
++----------------------------+
+|     Call WriteData         |
+|----------------------------|
+|                            |
+|  Write Data (Clusters)     |
+|                            |
+|                            |
+|                            |
++----------------------------+
