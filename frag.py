@@ -54,12 +54,10 @@ HighTwoBytesFirst = ''
 LowTwoBytesFirst = ''
 FreeDirOffset = ''
 EndOfChain = 0xfffffff8
-#EndOfChain = 0xf8ffffff
 EndOfFile = 0x0fffffff
 EmptyCluster = 0x00000000
 DamagedCluster = 0x0ffffff7
 
-MinFileLength = 512*8
 TotalChunks = 0  #The total clusters that need to be written. This will be int * remainder
 FirstCluster = 0 #The first cluster.  This is written to the RootDir
 ChunkList = []
@@ -68,18 +66,18 @@ ChunkList = []
 # </editor-fold>
 
 def GetHighBytes(number):
-    if (debug == 1):
+    if (debug == 2):
         print ('Entering GetHighBytes:')
     highbytes = (number & 0xffff0000)
-    if (debug == 1):
+    if (debug == 2):
         print ('\tHigh Bytes: ' + str(highbytes))
     return highbytes
 
 def GetLowBytes(number):
-    if (debug == 1):
+    if (debug == 2):
         print ('Entering GetLowBytes:')
     lowbytes = (number & 0x0000ffff)
-    if (debug == 1):
+    if (debug == 2):
         print ('\tLow Bytes: ' + str(lowbytes))
     return lowbytes
 
@@ -162,12 +160,18 @@ def ReadBootSector(volume):
             print('First Data Sector: ' + str(FirstDataSector))
 
 def GetFileSize(file):
-    if (debug == 1):
+    if (debug == 2):
         print ('Entering GetFileSize:')
     size = os.path.getsize(file)  #Return length of file
-    if (debug == 1):
+    if (debug == 2):
         print ('\tFilesize: '+ str(size))
     return size
+
+def MinFileLength(file, fragments):
+    if (file < BytesPerSector * SectorsPerCluster * fragments + 1 ):
+        return False
+    else:
+        return True
 
 def GetOffsetFromCluster(FATOffset, cluster):  #FATOffset is ReservedSectorCount
     if (debug == 2):
@@ -178,11 +182,6 @@ def GetOffsetFromCluster(FATOffset, cluster):  #FATOffset is ReservedSectorCount
         print ('\tFAT Offset (Bytes:) ' + str(FATOffset * 512))
         print ('\tCluster: ' + str(cluster) + ' - Offset (Bytes): ' + str(temp))
     return (temp)
-
-#def GetOffsetFromClusterData(rootcluster, cluster):
-#        if (debug == 1):
-#        print ('Entering GetOffsetFromClusterData:')
-#    return ''
 
 def GetChunks(file):
     if (debug == 1):
@@ -196,7 +195,7 @@ def GetChunks(file):
         TotalChunks = totalchunks
     else:
         TotalChunks = totalchunks + 1
-    if (debug):
+    if (debug == 2):
         print ('\t' + str(totalchunks) + ' - ' + str(ClusterSize) + ' byte chunks.')
         print ('\tRemainder Bytes: ' + str(remainderbytes))
         print ('\tOriginal File Size: ' + str(GetFileSize(file)))
@@ -211,22 +210,34 @@ def ReadFat(volume, FATOffset, chunks, fragments): #Passes in the volume and chu
         print ('\tFragment passed in: ' + str(fragments))
     global ChunkList
     global FirstCluster
+    splitter = int(0)
+    frag = False
+    if (fragments != 0):
+        frag = True
+        if (debug == 1):
+            print ('\tFragment Parameter Entered.')
+    #print (frag)
     x = 0
-    splitter = int(chunks/fragments) #The number of groups.  Divide by fragments and take integer
+    if (frag):
+        splitter = int(chunks/fragments) #The number of groups.  Divide by fragments and take integer
+        if (debug == 1):
+            print ('\tFragging Enabled.')
     numberofsplits = fragments - 1 #This is how many actual splits there will be
     counter = 0 #The counter to make sure we don't exceed the number of splits
     splitcounter = 0 #How many splits have occurred.
     if (debug == 1):
-        print ('\tSplitter Value: ' + str(splitter))
-        print ('\tTotal Number of Splits: ' + str(numberofsplits))
-        print ('\tFragment passed in: ' + str(fragments))
+        if (fragments != 0):
+            print ('\tSplitter Value: ' + str(splitter))
+            print ('\tTotal Number of Splits: ' + str(numberofsplits))
+            print ('\tFragment passed in: ' + str(fragments))
     with open(volume, "rb") as f:  #Opens the file for reading/writing http://www.tutorialspoint.com/python/python_files_io.htm
         f.seek(FATOffset * 512) #Remember to multiply by 512 to get bytes
         bytes = f.read(TotalFAT32Bytes) #Read a copy of the FAT Table
         clusternumber = 0
+        
         for u in range(0, chunks):
             temp = (bytes[x:x+4])
-            if (debug == 2):
+            if (debug == 1):
                 print ('\tBytes Found: ' + str(x) + ':' + str(temp))
                 print ('\tCluster Offset: ' + str(clusternumber)) #Clusters start at 2 , so add 2 to iterator
             if (temp == b'\x00\x00\x00\x00'):
@@ -234,21 +245,19 @@ def ReadFat(volume, FATOffset, chunks, fragments): #Passes in the volume and chu
                     print ('\tFree Cluster - Byte Offset: ' + str((FATOffset * 512) + x))
                 ChunkList.append(clusternumber)
                 #Increase cluster number to force fragmentation (Future will be a frag counter that decrements here and then stops the increase once decremented
-                if (debug == 1):
+                if (frag):
                     if (counter % splitter == 0):
-                        if (debug == 1):
-                            print ('\tCounter / Splitter == 1: True')
+                        if (debug == 2):
+                            print ('\tCounter / Splitter: True')
                         if (numberofsplits > splitcounter):
                             clusternumber += 1
                             splitcounter += 1
                             x += 4
-                            if (debug == 1):
+                            if (debug == 2):
                                 print ('\tSplit! SplitCounter \ Cluster: ' + str(splitcounter) + str(clusternumber))
-                #else:
-                #    clusternumber += 1
-                #    splitcounter += 1
-                #    x += 4
-                #    print ('should not be here')
+                    else:
+                        if (debug == 2):
+                            print ('\tNo Fragmentation.')
             x += 4
             clusternumber += 1
         if (debug == 1):
@@ -358,7 +367,8 @@ def WriteData(volume, file, clusterlist):
                 if (debug == 1):
                     print ('\tSeeking to Cluster (Bytes) [Cluster]: ' + '[' + str(cluster) + ']' + str(seeker))
                     chunk = r.read(ClusterSize)
-                    print (chunk)
+                    if (debug == 2):
+                        print ('\tData Chunk Written: ' + str(chunk))
                     f.write(chunk)
                     #while chunk != b'':
                     #    chunk = r.read(ClusterSize)
@@ -379,14 +389,7 @@ def FlagValues(mask):
     else: 
         return 'file'
   
-def CheckFileLength(file):
-    #Check if the file length is too short
-    if (len(file) < (MinFileLength)):
-        return False
-    else:
-        return True
-
-def signal_handler(signal, frame): 
+def signal_handler(signal, frame):
     print('Ctrl+C pressed. Exiting.') 
     sys.exit(0) 
 
@@ -394,26 +397,26 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def main(argv):
     #global debug
-    #parse the command-line arguments 
+    #parse the command-line arguments
+    fragments = int(0)
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--file', help='The file to write.', required=True)
-    parser.add_argument('-n', '--number', help='The number of fragments.', required=False) 
+    parser.add_argument('-n', '--number', help='The number of fragments.', required=False)
     parser.add_argument('-v', '--volume', help='The volume to write to.', required=True) 
     parser.add_argument('-d', '--debug', help='Debugging.', required=False) 
     args = parser.parse_args()
-
-    if (args.file): 
+    if (args.file):
         file = args.file
     if (args.volume):
         volume = args.volume 
     if (args.number): 
-        fragments = args.number 
-    else: 
-        fragments = 3
+        fragments = args.number
+        fragments = int(fragments)
     if (args.volume):
         volume = args.volume
     if (args.debug):
         debug = args.debug
+        print (debug)
     if _platform == "linux" or _platform == "linux2": 
         os = 'Linux'
     elif _platform == "darwin": 
@@ -427,6 +430,9 @@ def main(argv):
         print ('\tVolume: ' + str(volume))
         print ('\tOperating System: ' + str(os))
         print ('\tDebug Level: ' + str(debug))
+    #if (os == 'Windows'):
+    #    print ('Error: System not supported.')
+    #    sys.exit(1)
 
     ReadBootSector(volume) 
     GetFileSize(file)
