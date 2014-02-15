@@ -1,20 +1,19 @@
 __author__ = 'khanta'
 #TODO Update error checking on filesize
-#TODO TimeDate Stamp Update
+#TODO TimeDate Stamp MS and Accessed Day
 #TODO Error checking on Volume
 #TODO Windows won't work.
 import os 
-import sys, getopt 
-import argparse 
-import signal 
-import binascii 
-import struct 
-import logging
+import sys
+import argparse
+import datetime
+import signal
+import struct
 from array import array
 from sys import platform as _platform
 import ntpath
 
-debug = True
+debug = 0
 #References Microsoft's FAT General Overview 1.03 
 # <editor-fold desc="Boot Sector Variables">
   
@@ -65,6 +64,37 @@ ChunkList = []
 
 # </editor-fold>
 
+def GetDate():
+    if (debug == 2):
+        print ('Entering GetDate:')
+    dtm = datetime.datetime.now()
+    #dtm = datetime.datetime.now()
+    i_year = int((dtm.year - 1980) << 9)
+    i_month = int((dtm.month) << 5)
+    i_day = int((dtm.day & 0x1F))
+    i_hour = int((dtm.hour) << 11)
+    i_min = int((dtm.minute) << 5)
+    i_sec = int(dtm.second) / 2
+    i_ms = int(dtm.microsecond)
+    i_lo = int((int(i_year) | int(i_month)) | int(i_day))
+    i_hi = int((int(i_hour) | int(i_min)) | int(i_sec))
+    low = struct.pack("<H", i_lo)
+    high = struct.pack("<H", i_hi)
+    #ms = struct.pack("h", i_ms)
+    if (debug == 2):
+        print ('MS:HH:MM:SS:DD - '  + str(high) + str(low))
+    return high + low
+
+def GetDay():
+    if (debug == 2):
+        print ('Entering GetDay:')
+    dtm = datetime.datetime.now()
+    i_day = int((dtm.day) & 0x1F)
+    day = struct.pack(">i", i_day)
+    if (debug == 2):
+        print('Day: ' + str(day))
+    return day
+
 def GetHighBytes(number):
     if (debug == 2):
         print ('Entering GetHighBytes:')
@@ -87,9 +117,12 @@ def FileNamePad(file):
     #filename = file.encode('ascii').zfill(11).upper() #Padding on wrong side
     if (len(file) < 11):
         padding = 11 - len(file)
-    filename = file.replace('.', ' ')
-    filename = filename.encode('ascii').upper()
+    #filename = file.replace('.', ' ')
+    filename = file.encode('ascii').upper()
     filename += padding * b'\x00'
+    if (debug == 2):
+        print('\tFilename Length/Padding Length: ' + str(len(file)) + '/' + str(padding))
+        print('\tFilename: ' + str(filename))
     return filename
 
 def ReadBootSector(volume):
@@ -139,25 +172,25 @@ def ReadBootSector(volume):
         #FirstDataSector = BPB_ReservedSecCnt + (BPB_NumFATs * FATSz) + RootDirSectors;
         FirstDataSector = ReservedSectorCount + (NumberOfFATs * FAT32Size) + RootDirSectors
         if (debug == 1):
-            print('Bytes per Sector: ' + str(BytesPerSector))
-            print('Sectors per Cluster: ' + str(SectorsPerCluster))
-            print('Cluster Size: ' + str(ClusterSize))
-            print('Root Cluster: ' + str(RootCluster))
-            print('FSInfo Cluster: ' + str(FSInfoSector))
-            print('Total Sectors: ' + str(TotalSectors))
-            print('Reserved Sector Count: ' + str(ReservedSectorCount))
-            print('Reserved Sectors: ' + '0  - ' + str(ReservedSectorCount - 1))
-            print('FAT Offset: ' + str(ReservedSectorCount))
-            print('FAT Offset (Bytes): ' + str(ReservedSectorCount * 512))
-            print('Number of FATs: ' + str(NumberOfFATs))
-            print('FAT32 Size: ' + str(FAT32Size))
-            print('Total FAT32 Sectors: ' + str(TotalFAT32Sectors))
-            print('FAT Sectors: '+ str(ReservedSectorCount) + ' - ' +  str((ReservedSectorCount - 1) + (FAT32Size * NumberOfFATs)))
-            print('Data Area: ' + str(DataAreaStart) + ' - ' + str(DataAreaEnd))
-            print('Data Area Offset (Bytes): ' + str(DataAreaStart * 512))
-            print('Root Directory: ' + str(DataAreaStart) + ' - ' + str(DataAreaStart + 3))
+            print('\tBytes per Sector: ' + str(BytesPerSector))
+            print('\tSectors per Cluster: ' + str(SectorsPerCluster))
+            print('\tCluster Size: ' + str(ClusterSize))
+            print('\tRoot Cluster: ' + str(RootCluster))
+            print('\tFSInfo Cluster: ' + str(FSInfoSector))
+            print('\tTotal Sectors: ' + str(TotalSectors))
+            print('\tReserved Sector Count: ' + str(ReservedSectorCount))
+            print('\tReserved Sectors: ' + '0  - ' + str(ReservedSectorCount - 1))
+            print('\tFAT Offset: ' + str(ReservedSectorCount))
+            print('\tFAT Offset (Bytes): ' + str(ReservedSectorCount * 512))
+            print('\tNumber of FATs: ' + str(NumberOfFATs))
+            print('\tFAT32 Size: ' + str(FAT32Size))
+            print('\tTotal FAT32 Sectors: ' + str(TotalFAT32Sectors))
+            print('\tFAT Sectors: '+ str(ReservedSectorCount) + ' - ' +  str((ReservedSectorCount - 1) + (FAT32Size * NumberOfFATs)))
+            print('\tData Area: ' + str(DataAreaStart) + ' - ' + str(DataAreaEnd))
+            print('\tData Area Offset (Bytes): ' + str(DataAreaStart * 512))
+            print('\tRoot Directory: ' + str(DataAreaStart) + ' - ' + str(DataAreaStart + 3))
             #Extra Testing
-            print('First Data Sector: ' + str(FirstDataSector))
+            print('\t   First Data Sector: ' + str(FirstDataSector))
 
 def GetFileSize(file):
     if (debug == 2):
@@ -168,7 +201,7 @@ def GetFileSize(file):
     return size
 
 def MinFileLength(file, fragments):
-    if (file < BytesPerSector * SectorsPerCluster * fragments + 1 ):
+    if (GetFileSize(file) < BytesPerSector * SectorsPerCluster * fragments + 1 ):
         return False
     else:
         return True
@@ -234,16 +267,18 @@ def ReadFat(volume, FATOffset, chunks, fragments): #Passes in the volume and chu
         f.seek(FATOffset * 512) #Remember to multiply by 512 to get bytes
         bytes = f.read(TotalFAT32Bytes) #Read a copy of the FAT Table
         clusternumber = 0
-        
-        for u in range(0, chunks):
+
+        #for u in range(0, chunks):
+        while (chunks != 0):
             temp = (bytes[x:x+4])
-            if (debug == 1):
+            if (debug == 2):
                 print ('\tBytes Found: ' + str(x) + ':' + str(temp))
                 print ('\tCluster Offset: ' + str(clusternumber)) #Clusters start at 2 , so add 2 to iterator
             if (temp == b'\x00\x00\x00\x00'):
                 if (debug == 2):
                     print ('\tFree Cluster - Byte Offset: ' + str((FATOffset * 512) + x))
                 ChunkList.append(clusternumber)
+                chunks -= 1
                 #Increase cluster number to force fragmentation (Future will be a frag counter that decrements here and then stops the increase once decremented
                 if (frag):
                     if (counter % splitter == 0):
@@ -269,7 +304,7 @@ def ReadFat(volume, FATOffset, chunks, fragments): #Passes in the volume and chu
             print ('\tFirst Cluster Offset (Bytes:) ' + str(((FATOffset * 512) + ((FirstCluster - 1) * 4))))
 
 def ReadDirectory(volume):
-    if (debug):
+    if (debug == 1):
         print ('Entering ReadDirectory:')
     #512 Bytes per sector * start sector
     global FreeDirOffset
@@ -300,11 +335,18 @@ def WriteDirectory(file, volume, unallocatedoffset, firstcluster):
         f.seek(unallocatedoffset + 0)
         f.write(t1)
 
-    s2 = b'\x20\x18\x08\x4E\x50\x49\x44\x49\x44' #Adding archive bit and static info on time.
+    s2 = b'\x20\x00\x08\x4E\x50\x49\x44\x49\x44' #Adding archive bit and static info on time.
     t2 = array("B", s2)
     with open(volume, "rb+") as f: #Writing Binary!
         f.seek(unallocatedoffset + 11)
         f.write(t2)
+    #Start Date Time
+    sd = GetDate()   #Created Date/Time
+    td = array("B", sd)
+    with open(volume, "rb+") as f: #Writing Binary!
+        f.seek(unallocatedoffset + 14)
+        f.write(td)
+    #End Date Time
 
     s3 = struct.pack("<H",GetHighBytes(firstcluster)) #High Bytes - 2 Bytes
     with open(volume, "rb+") as f: #Writing Binary!
@@ -316,6 +358,14 @@ def WriteDirectory(file, volume, unallocatedoffset, firstcluster):
     with open(volume, "rb+") as f: #Writing Binary!
         f.seek(unallocatedoffset + 22)
         f.write(t4)
+
+    #Start Date Time
+    sd1 = GetDate()  #Written Date/Time
+    td1 = array("B", sd1)
+    with open(volume, "rb+") as f: #Writing Binary!
+        f.seek(unallocatedoffset + 22)
+        f.write(td1)
+    #End Date Time
 
     s5 = struct.pack("<H",GetLowBytes(firstcluster)) #Low Bytes - 2 Bytes
     with open(volume, "rb+") as f: #Writing Binary!
@@ -377,7 +427,8 @@ def WriteData(volume, file, clusterlist):
                     #        print (chunk)
 
 
-    print ('\tEnding Writing of Data.')
+    if (debug == 1):
+        print ('\tCompleted Writing Data.')
 
 def FlagValues(mask):
     if (debug  == 2):
@@ -396,7 +447,7 @@ def signal_handler(signal, frame):
 signal.signal(signal.SIGINT, signal_handler) 
 
 def main(argv):
-    #global debug
+    global debug
     #parse the command-line arguments
     fragments = int(0)
     parser = argparse.ArgumentParser()
@@ -416,8 +467,8 @@ def main(argv):
         volume = args.volume
     if (args.debug):
         debug = args.debug
-        print (debug)
-    if _platform == "linux" or _platform == "linux2": 
+        debug = int(debug)
+    if _platform == "linux" or _platform == "linux2":
         os = 'Linux'
     elif _platform == "darwin": 
         os = 'Mac'
@@ -435,12 +486,23 @@ def main(argv):
     #    sys.exit(1)
 
     ReadBootSector(volume) 
-    GetFileSize(file)
-    GetChunks(file)
-    ReadFat(volume, ReservedSectorCount, TotalChunks, fragments)
-    ReadDirectory(volume)
-    WriteDirectory(file, volume, FreeDirOffset, FirstCluster)
-    WriteFAT(volume, ReservedSectorCount, ChunkList)
-    WriteData(volume, file, ChunkList)
+
+    if (MinFileLength(file, fragments)):
+        print ('Reading Data.')
+        GetChunks(file)
+        print ('Reading FAT.')
+        ReadFat(volume, ReservedSectorCount, TotalChunks, fragments)
+        print ('Reading Directory.')
+        ReadDirectory(volume)
+        print ('Writing Directory.')
+        WriteDirectory(file, volume, FreeDirOffset, FirstCluster)
+        print ('Writing FAT.')
+        WriteFAT(volume, ReservedSectorCount, ChunkList)
+        print ('Writing Data.')
+        WriteData(volume, file, ChunkList)
+        print ('Completed.')
+    else:
+        print ('Error: Filesize too Small.')
+        #sys.exit(1)
 
 main(sys.argv[1:])
