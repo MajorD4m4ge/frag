@@ -115,6 +115,7 @@ def FileNamePad(file):
     if (debug == 1):
         print ('Entering FileNamePad:')
     #filename = file.encode('ascii').zfill(11).upper() #Padding on wrong side
+    padding = 0
     if (len(file) < 11):
         padding = 11 - len(file)
     #filename = file.replace('.', ' ')
@@ -392,11 +393,6 @@ def WriteFAT(volume, FATOffset, clusterlist):
             f.write(c)
             f.seek(GetOffsetFromCluster(FATOffset, cluster))
         f.write(struct.pack("I", EndOfChain))
-        #s1 = struct.pack("I", clusterlist[0])
-        #f.write(s1)
-        #f.seek(GetOffsetFromCluster(FATOffset, clusterlist[0]))
-        #s2 = struct.pack("I", clusterlist[1])
-        #f.write(s2)
 
 def WriteData(volume, file, clusterlist):
     if (debug == 1):

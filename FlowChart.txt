@@ -4,7 +4,7 @@
 |                            |      | Errors:                 |
 |                            |      |   Missing File          |
 |   Parse Command Line       +----->|   Missing Volume        |
-|                            |      |   File length too small |
+|    Debug on?               |      |   File length too small |
 |                            |      |                         |
 |                            |      |                         |
 +-------------+--------------+      +-------------------------+
@@ -22,34 +22,44 @@
               |
               |
               v
++----------------------------+ 
+|      Call GetChunks        |
+|----------------------------|
+|                            | 
+| Calculates # of clusters   |
+|                            |
+|                            |      
++-------------+--------------+
+              |
+              |
+              v
 +----------------------------+
-|      Call FileInfo         |
+|      Call ReadFAT          |
 |----------------------------|
 |                            |
-|  Get File Information      |
-|  Get Chunks of File        |
-|  Read Chunks --> Vars      |
+|  Read FAT Table            |
+|  Find Free Entries         |
+|  If Fragments, Calc Groups |
 +-------------+--------------+
               |
               |
               v
 +----------------------------+
-|      Call FatInfo          |
+|     Call ReadDirectory     |
 |----------------------------|
-|  Find cluster(2 unalloc)   |
-|  Store first cluster       |
-|  Find 2 free clusters      |
-|  Loop for all chunks       |
-|  Write cluster chain       |
-|  Verify                    |
+|                            |
+|  Find Free Entries         |
+|   - Only 0x00 not 0xe5     |
+|  Return Offset             |
 +-------------+--------------+
               |
               |
               v
 +----------------------------+
-|     Call RootDir           |
+|    Call WriteDirectory     |
 |----------------------------|
-|  Find free directory       |
+|                            |
+|  Go to Free Offset         |
 |  Write Data:               |
 |    Filename                |
 |    File Info (Date, A, ..) |
@@ -60,10 +70,22 @@
               |
               v
 +----------------------------+
+|       Call WriteFAT        |
+|----------------------------|
+|                            |
+|  Go to 1st Cluster Offset  |
+|  Write Data:               |
+|    Clusters                |
+|                            |
++-------------+--------------+
+              |
+              |
+              v
++----------------------------+
 |     Call WriteData         |
 |----------------------------|
 |                            |
-|  Write Data (Clusters)     |
+|  Write Actual Data         |
 |                            |
 |                            |
 |                            |

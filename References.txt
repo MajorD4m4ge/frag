@@ -1,0 +1,15 @@
++---------------------------------------------------------------------------------------+
+|                      References:                                                      |
++---------------------------------------------------------------------------------------+
+|                                                                                       |
+|  http://www.tutorialspoint.com/python/python_files_io.htm                             |
+|  http://technet.microsoft.com/en-us/library/cc940351.aspx                             |
+|  http://en.wikipedia.org/wiki/File_Allocation_Table                                   |
+|  http://www.pjrc.com/tech/8051/ide/fat32.html                                         |
+|  http://msdn.microsoft.com/en-US/windows/hardware/gg463084                            |
+|  http://docs.python.org/2/library/struct.html                                         |
+|  http://docs.python.org/2/tutorial/inputoutput.html                                   |
+|  http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python |
+|  File System Forensic Analysis (Chap 8,9,10)                                          |
+|                                                                                       |
++---------------------------------------------------------------------------------------+
