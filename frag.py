@@ -478,10 +478,10 @@ def WriteData(volume, file, clusterlist):
                     f.seek(seeker)  #Each ClusterNum - 2 (Offset) * Bytes per cluster + (DataAreaStart * 512)
                     if (debug >= 1):
                         print('\tSeeking to Cluster (Bytes) [Cluster]: ' + '[' + str(cluster) + ']' + str(seeker))
-                        chunk = r.read(ClusterSize)
-                        if (debug >= 2):
-                            print('\tData Chunk Written: ' + str(chunk))
-                        f.write(chunk)
+                    chunk = r.read(ClusterSize)
+                    if (debug >= 2):
+                           print('\tData Chunk Written: ' + str(chunk))
+                    f.write(chunk)
         if (debug >= 1):
             print('\tCompleted Writing Data.')
     except:
