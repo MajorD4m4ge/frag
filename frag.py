@@ -74,6 +74,8 @@ MD5HashValue = ''
 
 
 def HashMD5(file, block_size=2 ** 20):
+    if (debug >= 1):
+        print('Entering HashMD5:')
     md5 = hashlib.md5()
     with open(file, 'rb') as f:
         while True:
@@ -85,7 +87,7 @@ def HashMD5(file, block_size=2 ** 20):
 
 
 def GetDate():
-    if (debug >= 2):
+    if (debug >= 1):
         print('Entering GetDate:')
     dtm = datetime.datetime.now()
     #dtm = datetime.datetime.now()
@@ -144,7 +146,7 @@ def FileNamePad(file):
         padding = 11 - len(file)
 
     if (debug == 2):
-        print ('\tFilename : Replaced Filename -' + str(file) + ':' + str(file.replace('.', ' ')))
+        print ('\tFilename : Replaced Filename --> ' + str(file) + ':' + str(file.replace('.', ' ')))
 
     filename = filename.encode('ascii').upper()
     filename += padding * b'\x20'
@@ -495,7 +497,6 @@ def SearchDirectory(volume, file, write):
         if (debug >= 2):
             print ('\tFilename to Search: ' + str(s1))
         match = False
-        chunk = 512 * 2048 * 2
         global FirstCluster
         global FileSize
         global e
@@ -503,19 +504,16 @@ def SearchDirectory(volume, file, write):
             if (debug >= 2):
                 print('\tSeeking to First Data Sector [Bytes]: ' + str(512 * FirstDataSector))
             x = 0
-            while (chunk != 0):
+            while (True):
                 f.seek(512 * FirstDataSector + x)
                 bytes = f.read(32)  #Size of FAT32 Directory
                 FirstChar = struct.unpack("b", bytes[0:1])[0]
-                if not (FirstChar == 0x00):
-                    if (debug >= 3):
-                        print('\tFirst Character not 0x00.')
-                    if not (FirstChar == 0xe5):
-                        if (debug >= 3):
-                            print('\tFirst Character not 0xe5.')
-                            print('\tReading First 11 Bytes.')
+                if not (FirstChar == 0x00): #Check for Unallocated Dir (This means exit!)
+                    if not (FirstChar == 0xe5): #Check for Unallocated Dir
                         filename = bytes[0:11]
                         if (debug >= 3):
+                            print('\tFirst Character not 0xe5 or 0x00.')
+                            print('\tReading First 11 Bytes.')
                             print ('\tDirectory Value: ' + str(filename))
                         if (filename == s1):
                             match = True
@@ -538,15 +536,10 @@ def SearchDirectory(volume, file, write):
                             break
                         else:
                             x += 32
-                            chunk -= 32
                     else:
-                        x += 32
-                        chunk -= 32
+                        break
                 else:
-                    x += 32
-                    chunk -= 32
-            #sys.exit('File ' + str(file) + ' not found in Directory.')
-
+                    break
 
 
 def SearchFAT(volume, FATOffset, FirstCluster):
@@ -583,10 +576,14 @@ def SearchFAT(volume, FATOffset, FirstCluster):
         sys.exit('Error: Cannot read Search FAT.')
 
 
-def ReadData(volume, clusterlist, file, size):
+def ReadData(volume, clusterlist, size):
         try:
             if (debug >= 1):
                 print('Entering ReadData:')
+            if (debug >= 2):
+                print('Volume Passed in: ' + str(volume))
+                print('Clusterlist Passed in: ' + str(clusterlist))
+                print('Size in: ' + str(size))
             readchunk = bytearray()
             with open(volume, "rb") as f:
                 for cluster in clusterlist:  #New Offset is 2 (Cluster)
@@ -594,9 +591,7 @@ def ReadData(volume, clusterlist, file, size):
                     f.seek(seeker)  #Each ClusterNum - 2 (Offset) * Bytes per cluster + (DataAreaStart * 512)
                     if (debug >= 2):
                         print('\tSeeking to Cluster (Bytes) [Cluster]: ' + '[' + str(cluster) + ']' + str(seeker))
-                    readchunk += f.read(2048)
-                    if (debug >= 3):
-                        print ('\tChunk Read: ' + str(readchunk))
+                    readchunk += f.read(ClusterSize)
                 filedata = readchunk[0:size]
                 if (debug >= 3):
                         print ('\tFile Data: ' + str(filedata))
@@ -753,7 +748,7 @@ def main(argv):
             print('| Searching FAT                                                          |')
             clusterlist = SearchFAT(volume, ReservedSectorCount, FirstCluster)
             print('| Reading Data                                                           |')
-            filedata = ReadData(volume, clusterlist, file, FileSize)
+            filedata = ReadData(volume, clusterlist, FileSize)
             print('| Writing Data                                                           |')
             print('| Completed.                                                             |')
             print('+------------------------------------------------------------------------+')
