@@ -39,9 +39,9 @@ DataAreaEnd = ''
 RootDirSectors = 0  #Always 0 for Fat32 Per MS Documentation
 #FSINFO 
 Signature = ''
-NumberOfFreeClusters = ''
-NextFreeCluster = ''
-# </editor-fold> 
+NumberOfFreeClusters = 0
+NextFreeCluster = 0
+# </editor-fold>
 
 # <editor-fold desc="Global Variables">
 FirstChar = ''
@@ -58,7 +58,8 @@ FileSize = 0
 HighTwoBytesFirst = ''
 LowTwoBytesFirst = ''
 FreeDirOffset = ''
-EndOfChain = 0xfffffff8
+#EndOfChain = 0xfffffff8
+EndOfChain = 0x0fffffff
 EndOfFile = 0x0fffffff
 EmptyCluster = 0x00000000
 DamagedCluster = 0x0ffffff7
@@ -137,23 +138,72 @@ def GetLowBytes(number):
     return lowbytes
 
 
+# def FileNamePad(file):
+#     if (debug >= 1):
+#         print('Entering FileNamePad:')
+#     padding = 0
+#     filename = file.replace('.', ' ')
+#     if (len(file) < 11):
+#         padding = 11 - len(file)
+#
+#     if (debug == 2):
+#         print ('\tFilename : Replaced Filename --> ' + str(file) + ':' + str(file.replace('.', ' ')))
+#
+#     filename = filename.encode('ascii').upper()
+#     filename += padding * b'\x20'
+#     if (debug >= 2):
+#         print('\tFilename Length/Padding Length: ' + str(len(file)) + '/' + str(padding))
+#         print('\tFilename: ' + str(filename))
+#     return filename
+
+
 def FileNamePad(file):
-    if (debug >= 1):
-        print('Entering FileNamePad:')
-    padding = 0
-    filename = file.replace('.', ' ')
-    if (len(file) < 11):
-        padding = 11 - len(file)
+    try:
+        if (debug >= 1):
+            print('Entering FileNamePad:')
+        if (debug >= 2):
+            print('\tFilename Passed in: ' + str(file))
+        padding = 0
+        length = len(file)
+        if (length == 12):
+            if "." in str(file):
+                filename = file.replace('.', '')
+                filename = filename.encode('ascii').upper()
+                return filename
+            else:
+                print('Long Filenames not Supported.')
+                sys.exit()
+        else:
+            if (length > 12):
+                print('Long Filenames not Supported.')
+                sys.exit()
+            else:
+                if "." in str(file):
+                    if (debug >= 2):
+                        print('\tFilename has Period in it.' + str(file))
+                    filename = file.replace('.', ' ')
+                    extension = filename[-3:]
+                    filename1 = filename.split(' ')[0]
+                    if (len(filename1) < 7):
+                        padding = 7 - len(filename1)
+                        if (debug >= 2):
+                            print('\tFilename and Length - ' + str(filename1) + ' : ' + str(padding))
+                        filename = filename1.encode('ascii').upper()
+                        filename += padding * b'\x20'
+                    else:
+                        filename = file.encode('ascii').upper()
+                else:
+                    filename = file.encode('ascii').upper()
 
-    if (debug == 2):
-        print ('\tFilename : Replaced Filename --> ' + str(file) + ':' + str(file.replace('.', ' ')))
+        extension = extension.encode('ascii').upper()
+        if (debug >= 2):
+            print('\tFilename Length/Padding Length: ' + str(len(file)) + '/' + str(padding))
+            print('\tFilename: ' + str(filename + extension))
+        filename = filename + extension
+        return filename
+    except:
+        sys.exit('Error Verifying Filename.')
 
-    filename = filename.encode('ascii').upper()
-    filename += padding * b'\x20'
-    if (debug >= 2):
-        print('\tFilename Length/Padding Length: ' + str(len(file)) + '/' + str(padding))
-        print('\tFilename: ' + str(filename))
-    return filename
 
 
 def ReadBootSector(volume):
@@ -231,6 +281,56 @@ def ReadBootSector(volume):
         sys.exit('Error: Cannot read Boot Sector.')
 
 
+def GetFSInfo(volume):
+    #try:
+        if (debug >= 1):
+            print('Entering GetFSInfo:')
+
+        #Number of Free Clusters - 488-491
+        #Next Free Cluster 492-495
+        global NumberOfFreeClusters
+
+        with open(volume, "rb") as f:
+            f.seek(FSInfoSector * BytesPerSector + 488)
+            temp = f.read(4)
+            NumberOfFreeClusters = struct.unpack("<i", temp)[0]
+            if (debug >= 2):
+                print ('\tNumber of Free Clusters: ' + str(struct.unpack("<i", temp)[0]))
+            f.seek(FSInfoSector * BytesPerSector + 492)
+            NextFreeCluster = f.read(4)
+            if (debug >= 2):
+                print ('\tNext Free Cluster: ' + str(struct.unpack("<i", NextFreeCluster)[0]))
+    #except:
+
+
+def GetNextFreeCluster(volume):
+    #try:
+        if (debug >= 1):
+            print('Entering GetNextFreeCluster:')
+
+        global NextFreeCluster
+        clusternumber = 0
+        x = 0
+        with open(volume, "rb") as f:
+            f.seek(ReservedSectorCount * 512)  #Remember to multiply by 512 to get bytes
+            bytes = f.read(TotalFAT32Bytes)  #Read a copy of the FAT Table
+            #for u in range(0, chunks):
+            while (True):
+                temp = (bytes[x:x + 4])
+                if (temp == b'\x00\x00\x00\x00'):
+                    if (debug >= 2):
+                        print('\tFree Cluster - Byte Offset: ' + str((ReservedSectorCount * 512) + x))
+                        print('\tFree Cluster Number: ' + str(clusternumber))
+                    freecluster = clusternumber
+                    break
+                else:
+                    x += 4
+                    clusternumber += 1
+        NextFreeCluster = freecluster
+        return freecluster
+    #except:
+
+
 def GetFileSize(file):
     if (debug >= 2):
         print('Entering GetFileSize:')
@@ -283,13 +383,15 @@ def GetChunks(file):
 
 
 def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and chunks that need to written
-    try:
+    #try:
         if (debug >= 1):
             print('Entering ReadFat:')
             print('\tChunks passed in: ' + str(chunks))
             print('\tFragment passed in: ' + str(fragments))
         global ChunkList
         global FirstCluster
+        global TotalFreeClusters
+        global NumberOfFreeClusters
         splitter = int(0)
         frag = False
         if (fragments != 0):
@@ -347,11 +449,14 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
                 print('\tCluster List [Total]: ' + '[' + str(len(ChunkList)) + ']' + (str(ChunkList)))
 
             FirstCluster = ChunkList[0]
+            if (debug >= 2):
+                print ('\tNumber of Free Clusters - Number Used (' + str(NumberOfFreeClusters) + ' - ' + str(len(ChunkList)) + ')' + '= ' + str(NumberOfFreeClusters - len(ChunkList)))
+            NumberOfFreeClusters = NumberOfFreeClusters - len(ChunkList)
             if (debug >= 1):
                 print('\tFirst Cluster: ' + (str(FirstCluster)))
                 print('\tFirst Cluster Offset (Bytes:) ' + str(((FATOffset * 512) + ((FirstCluster - 1) * 4))))
-    except:
-        sys.exit('Error: Cannot read FAT.')
+    #except:
+        #sys.exit('Error: Cannot read FAT.')
 
 
 def ReadDirectory(volume, file):
@@ -371,9 +476,8 @@ def ReadDirectory(volume, file):
             while True:
                 f.seek(512 * FirstDataSector + x)
                 bytes = f.read(32)  #Size of FAT32 Directory
-                FirstChar = struct.unpack("b", bytes[0:1])[0]
-
-                if (FirstChar == 0x00):
+                #FirstChar = struct.unpack("b", bytes[0:1])[0]
+                if (bytes[0:1] == b'\xe5') or (bytes[0:1] == b'\x00'):
                     #if FirstChar in ('0x00', '0xe5'):
                     FreeDirOffset = ((512 * FirstDataSector) + x)
                     if (debug >= 1):
@@ -613,6 +717,27 @@ def WriteDatatoFile(file, filedata):
             sys.exit('Error: Cannot Write Data.')
 
 
+def WriteFSInfo(volume):
+    #try:
+        if (debug >= 1):
+            print('Entering WriteFSInfo:')
+        #Number of Free Clusters - 488-491
+        #Next Free Cluster 492-495
+        global NumberOfFreeClusters
+        global NextFreeCluster
+
+        with open(volume, "rb+") as f:
+            f.seek(FSInfoSector * 512 + 488)
+            f.write(struct.pack("i", NumberOfFreeClusters))
+            if (debug >= 2):
+                print ('Number of Free Clusters: ' + str(NumberOfFreeClusters))
+            f.seek(FSInfoSector * 512 + 492)
+            f.write(struct.pack("i", NextFreeCluster))
+            if (debug >= 2):
+                print ('Next Free Cluster: ' + str(NextFreeCluster))
+    #except:
+
+
 def FlagValues(mask):
     if (debug >= 2):
         print('Entering FlagValues:')
@@ -705,7 +830,6 @@ def main(argv):
 
         ReadBootSector(volume)
 
-
         if not (read):
             if (MinFileLength(file, fragments)):
                 print('')
@@ -729,6 +853,10 @@ def main(argv):
                 WriteFAT(volume, ReservedSectorCount, ChunkList)
                 print('| Writing Data.                                                          |')
                 WriteData(volume, file, ChunkList)
+                print('| Getting Next Free Cluster.                                             |')
+                GetNextFreeCluster(volume)
+                print('| Writing FSInfo.                                                        |')
+                WriteFSInfo(volume)
                 print('| Completed.                                                             |')
                 print('+------------------------------------------------------------------------+')
             else:
