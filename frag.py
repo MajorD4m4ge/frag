@@ -6,6 +6,8 @@ __author__ = 'khanta'
 #TODO Windows won't work.
 #TODO Add marking clusters as bad
 #TODO Rework command line args
+#Create Disk  --> dd if=/dev/zero of=512MB.dd bs=1M count=512
+#Create FAT32 --> mkdosfs -n 512MB -F 32 -v 512MB.dd
 import os
 import sys
 import argparse
@@ -151,6 +153,7 @@ def FileNamePad(file):
         if (debug >= 2):
             print('\tFilename Passed in: ' + str(file))
         padding = 0
+        extpad = 0
         extension = ''
         length = len(file)
         if (length == 12):
@@ -171,10 +174,13 @@ def FileNamePad(file):
                         print('\tFilename has Period in it. -->' + str(file))
                     parts = file.split('.')
                     extension = parts[1]
+                    if (len(extension) < 3):
+                        extpad = 3 - len(extension)
+                    extension = extension.encode('ascii').upper()
+                    extension += extpad * b'\x20'
                     filename = parts[0]
                     if (debug >= 2):
                         print('\tExtension: ' + str(extension))
-                    if (debug >= 2):
                         print('\tFile: ' + str(filename))
                     if (len(filename) < 8):
                         padding = 8 - len(filename)
@@ -192,9 +198,8 @@ def FileNamePad(file):
                     filename = file.encode('ascii').upper()
                     filename += padding * b'\x20'
                     FileName = filename
-
         if not (extension == ""):
-            extension = extension.encode('ascii').upper()
+            #extension = extension.encode('ascii').upper()
             filename = filename + extension
             FileName = filename
             if (debug >= 2):
@@ -492,7 +497,28 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
         error = ('Error: Cannot read FAT.')
         status = False
     finally:
+        print('Clusters skipped: ' + str(find_missing_range(ChunkList, FirstCluster, ChunkList[-1])))
         return status, error
+
+
+def find_missing_range(my_numbers, range_min, range_max):
+    expected_range = set(range(range_min, range_max + 1))
+    return expected_range - set(my_numbers)
+
+
+def numbers_as_ranges(numbers):
+    ranges = []
+    for number in numbers:
+        if ranges and number == (ranges[-1][-1] + 1):
+            ranges[-1] = (ranges[-1][0], number)
+        else:
+            ranges.append((number, number))
+    return ranges
+
+
+def format_ranges(ranges):
+    range_iter = (("%d" % r[0] if r[0] == r[1] else "%d-%d" % r) for r in ranges)
+    return "(" + ", ".join(range_iter) + ")"
 
 
 def ReadDirectory(volume, file):
@@ -892,20 +918,6 @@ def Completed(file):
     sys.exit(0)
 
 
-def usage():
-    print('A FAT32 file system writer that forces fragmentation.')
-    print('Usage: frag.py -fnvdr|h')
-    print('')
-    print('Required arguments:')
-    print('-f, --file\t\tThe file to write to the FAT32 volume.')
-    print('-v, --volume\t\tThe volume to write the fragmented file to.')
-    print('Optional arguments:')
-    print('-n, --number\t\tThe number of fragments to create.')
-    print('-r, --read\t\tThe file to read from FAT32 volume.')
-    print('-d, --debug\t\tThe level of debugging.')
-    print('-h, --help\t\tThis help output.')
-
-
 signal.signal(signal.SIGINT, signal_handler)
 
 
@@ -929,7 +941,7 @@ def main(argv):
                              required=False)
         rwgroup.add_argument('-r', '--read', help='The file to read from FAT32 volume.', action='store_true',
                              required=False)
-        parser.add_argument('--version', action='version', version='%(prog)s 1.0')
+        parser.add_argument('--version', action='version', version='%(prog)s 1.5')
         args = parser.parse_args()
         if (args.read):
             read = args.read
