@@ -140,29 +140,11 @@ def GetLowBytes(number):
     return lowbytes
 
 
-# def FileNamePad(file):
-#     if (debug >= 1):
-#         print('Entering FileNamePad:')
-#     padding = 0
-#     filename = file.replace('.', ' ')
-#     if (len(file) < 11):
-#         padding = 11 - len(file)
-#
-#     if (debug == 2):
-#         print ('\tFilename : Replaced Filename --> ' + str(file) + ':' + str(file.replace('.', ' ')))
-#
-#     filename = filename.encode('ascii').upper()
-#     filename += padding * b'\x20'
-#     if (debug >= 2):
-#         print('\tFilename Length/Padding Length: ' + str(len(file)) + '/' + str(padding))
-#         print('\tFilename: ' + str(filename))
-#     return filename
-
-
 def FileNamePad(file):
     status = True
     error = ''
     global FileName
+
     try:
         if (debug >= 1):
             print('Entering FileNamePad:')
@@ -229,7 +211,6 @@ def FileNamePad(file):
         return status, error
 
 
-
 def ReadBootSector(volume):
     # <editor-fold desc="Global Variables">
     global DataAreaStart
@@ -249,13 +230,14 @@ def ReadBootSector(volume):
     global DataAreaStart
     global DataAreaEnd
     global FirstDataSector
-        # </editor-fold>
+    # </editor-fold>
     status = True
     error = ''
-    if (debug >= 1):
-        print('Entering ReadBootSector:')
+
     # Reads the specified bytes from the drive
     try:
+        if (debug >= 1):
+            print('Entering ReadBootSector:')
         with open(volume, "rb") as f:
             bytes = f.read(BootSectorSize)
             BytesPerSector = struct.unpack("<H", bytes[11:13])[0]
@@ -275,7 +257,7 @@ def ReadBootSector(volume):
             TotalFAT32Bytes = FAT32Size * BytesPerSector
 
             DataAreaStart = ReservedSectorCount + TotalFAT32Sectors
-            DataAreaEnd = TotalSectors - 1 #Base 0
+            DataAreaEnd = TotalSectors - 1  #Base 0
             #Double Check per MS Documentation
             #FirstDataSector = BPB_ReservedSecCnt + (BPB_NumFATs * FATSz) + RootDirSectors;
             FirstDataSector = ReservedSectorCount + (NumberOfFATs * FAT32Size) + RootDirSectors
@@ -289,14 +271,14 @@ def ReadBootSector(volume):
                 print('\tReserved Sector Count: ' + str(ReservedSectorCount))
                 print('\tReserved Sectors: ' + '0  - ' + str(ReservedSectorCount - 1))
                 print('\tFAT Offset: ' + str(ReservedSectorCount))
-                print('\tFAT Offset (Bytes): ' + str(ReservedSectorCount * 512))
+                print('\tFAT Offset (Bytes): ' + str(ReservedSectorCount * BytesPerSector))
                 print('\tNumber of FATs: ' + str(NumberOfFATs))
                 print('\tFAT32 Size: ' + str(FAT32Size))
                 print('\tTotal FAT32 Sectors: ' + str(TotalFAT32Sectors))
                 print('\tFAT Sectors: ' + str(ReservedSectorCount) + ' - ' + str(
                     (ReservedSectorCount - 1) + (FAT32Size * NumberOfFATs)))
                 print('\tData Area: ' + str(DataAreaStart) + ' - ' + str(DataAreaEnd))
-                print('\tData Area Offset (Bytes): ' + str(DataAreaStart * 512))
+                print('\tData Area Offset (Bytes): ' + str(DataAreaStart * BytesPerSector))
                 #print('\tRoot Directory: ' + str(DataAreaStart) + ' - ' + str(DataAreaStart + 3))
                 #Extra Testing
                 print('\t   First Data Sector: ' + str(FirstDataSector))
@@ -313,24 +295,23 @@ def ReadBootSector(volume):
 def GetFSInfo(volume):
     status = True
     error = ''
+    global NumberOfFreeClusters
+
     try:
         if (debug >= 1):
             print('Entering GetFSInfo:')
-
         #Number of Free Clusters - 488-491
         #Next Free Cluster 492-495
-        global NumberOfFreeClusters
-
         with open(volume, "rb") as f:
             f.seek(FSInfoSector * BytesPerSector + 488)
             temp = f.read(4)
             NumberOfFreeClusters = struct.unpack("<i", temp)[0]
             if (debug >= 2):
-                print ('\tNumber of Free Clusters: ' + str(struct.unpack("<i", temp)[0]))
+                print('\tNumber of Free Clusters: ' + str(struct.unpack("<i", temp)[0]))
             f.seek(FSInfoSector * BytesPerSector + 492)
             NextFreeCluster = f.read(4)
             if (debug >= 2):
-                print ('\tNext Free Cluster: ' + str(struct.unpack("<i", NextFreeCluster)[0]))
+                print('\tNext Free Cluster: ' + str(struct.unpack("<i", NextFreeCluster)[0]))
     except:
         status = False
         error = 'Cannot read FSInfo'
@@ -339,24 +320,25 @@ def GetFSInfo(volume):
 
 
 def GetNextFreeCluster(volume):
+    status = True
+    error = ''
+
     try:
-        status = True
-        error = ''
+
         if (debug >= 1):
             print('Entering GetNextFreeCluster:')
-
         global NextFreeCluster
         clusternumber = 0
         x = 0
         with open(volume, "rb") as f:
-            f.seek(ReservedSectorCount * 512)  #Remember to multiply by 512 to get bytes
+            f.seek(ReservedSectorCount * BytesPerSector)  #Remember to multiply by 512 to get bytes
             bytes = f.read(TotalFAT32Bytes)  #Read a copy of the FAT Table
             #for u in range(0, chunks):
             while (True):
                 temp = (bytes[x:x + 4])
                 if (temp == b'\x00\x00\x00\x00'):
                     if (debug >= 2):
-                        print('\tFree Cluster - Byte Offset: ' + str((ReservedSectorCount * 512) + x))
+                        print('\tFree Cluster - Byte Offset: ' + str((ReservedSectorCount * BytesPerSector) + x))
                         print('\tFree Cluster Number: ' + str(clusternumber))
                     freecluster = clusternumber
                     break
@@ -390,10 +372,10 @@ def MinFileLength(file, fragments):
 def GetOffsetFromCluster(FATOffset, cluster):  #FATOffset is ReservedSectorCount
     if (debug >= 2):
         print('Entering GetOffsetFromCluster:')
-    temp = ((FATOffset * 512) + ((cluster) * 4))
+    temp = ((FATOffset * BytesPerSector) + ((cluster) * 4))
     if (debug >= 2):
         print('\tFAT Offset: ' + str(FATOffset))
-        print('\tFAT Offset (Bytes:) ' + str(FATOffset * 512))
+        print('\tFAT Offset (Bytes:) ' + str(FATOffset * BytesPerSector))
         print('\tCluster: ' + str(cluster) + ' - Offset (Bytes): ' + str(temp))
     return (temp)
 
@@ -401,10 +383,11 @@ def GetOffsetFromCluster(FATOffset, cluster):  #FATOffset is ReservedSectorCount
 def GetChunks(file):
     status = True
     error = ''
+    global TotalChunks
+
     try:
         if (debug >= 1):
             print('Entering GetChunks:')
-        global TotalChunks
         totalchunks = (int)(GetFileSize(file) / ClusterSize)
         remainderbytes = GetFileSize(file) % ClusterSize
         if (remainderbytes == 0):  #Checks if there is a remainder, if so add an extra chunk to total
@@ -419,7 +402,6 @@ def GetChunks(file):
             print('\tOriginal File Size: ' + str(GetFileSize(file)))
             print('\tTotal Bytes to be Written: ' + str(totalchunks * ClusterSize + remainderbytes))
             print('\tTotal Chunks: ' + str(TotalChunks))
-        return TotalChunks
     except:
         error = ('Error: Cannot Calculate Fragments.')
         status = False
@@ -430,15 +412,17 @@ def GetChunks(file):
 def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and chunks that need to written
     status = True
     error = ''
+    global ChunkList
+    global FirstCluster
+    global TotalFreeClusters
+    global NumberOfFreeClusters
+
     try:
         if (debug >= 1):
             print('Entering ReadFat:')
             print('\tChunks passed in: ' + str(chunks))
             print('\tFragment passed in: ' + str(fragments))
-        global ChunkList
-        global FirstCluster
-        global TotalFreeClusters
-        global NumberOfFreeClusters
+
         splitter = int(0)
         frag = False
         if (fragments != 0):
@@ -461,7 +445,7 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
                 print('\tFragment passed in: ' + str(fragments))
         with open(volume,
                   "rb") as f:  #Opens the file for reading/writing http://www.tutorialspoint.com/python/python_files_io.htm
-            f.seek(FATOffset * 512)  #Remember to multiply by 512 to get bytes
+            f.seek(FATOffset * BytesPerSector)  #Remember to multiply by 512 to get bytes
             bytes = f.read(TotalFAT32Bytes)  #Read a copy of the FAT Table
             clusternumber = 0
 
@@ -473,7 +457,7 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
                     print('\tCluster Offset: ' + str(clusternumber))  #Clusters start at 2 , so add 2 to iterator
                 if (temp == b'\x00\x00\x00\x00'):
                     if (debug >= 2):
-                        print('\tFree Cluster - Byte Offset: ' + str((FATOffset * 512) + x))
+                        print('\tFree Cluster - Byte Offset: ' + str((FATOffset * BytesPerSector) + x))
                     ChunkList.append(clusternumber)
                     chunks -= 1
                     #Increase cluster number to force fragmentation (Future will be a frag counter that decrements here and then stops the increase once decremented
@@ -497,11 +481,13 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
 
             FirstCluster = ChunkList[0]
             if (debug >= 2):
-                print ('\tNumber of Free Clusters - Number Used (' + str(NumberOfFreeClusters) + ' - ' + str(len(ChunkList)) + ')' + '= ' + str(NumberOfFreeClusters - len(ChunkList)))
+                print('\tNumber of Free Clusters - Number Used (' + str(NumberOfFreeClusters) + ' - ' + str(
+                    len(ChunkList)) + ')' + '= ' + str(NumberOfFreeClusters - len(ChunkList)))
             NumberOfFreeClusters = NumberOfFreeClusters - len(ChunkList)
             if (debug >= 1):
                 print('\tFirst Cluster: ' + (str(FirstCluster)))
-                print('\tFirst Cluster Offset (Bytes:) ' + str(((FATOffset * 512) + ((FirstCluster - 1) * 4))))
+                print(
+                    '\tFirst Cluster Offset (Bytes:) ' + str(((FATOffset * BytesPerSector) + ((FirstCluster - 1) * 4))))
     except:
         error = ('Error: Cannot read FAT.')
         status = False
@@ -509,33 +495,33 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
         return status, error
 
 
-
 def ReadDirectory(volume, file):
     status = True
     error = ''
+    global FreeDirOffset
+
     try:
         if (debug >= 1):
             print('Entering ReadDirectory:')
         #512 Bytes per sector * start sector
-        global FreeDirOffset
         write = True
         if not (SearchDirectory(volume, file, write)):
             with open(volume, "rb") as f:
-                f.seek(512 * FirstDataSector)
+                f.seek(BytesPerSector * FirstDataSector)
                 x = 0
                 while True:
-                    f.seek(512 * FirstDataSector + x)
+                    f.seek(BytesPerSector * FirstDataSector + x)
                     bytes = f.read(32)  #Size of FAT32 Directory
                     #FirstChar = struct.unpack("b", bytes[0:1])[0]
                     if (bytes[0:1] == b'\xe5') or (bytes[0:1] == b'\x00'):
                         #if FirstChar in ('0x00', '0xe5'):
-                        FreeDirOffset = ((512 * FirstDataSector) + x)
+                        FreeDirOffset = ((BytesPerSector * FirstDataSector) + x)
                         if (debug >= 1):
                             print('\tFirst Unallocated Directory Entry (Bytes): ' + str(FreeDirOffset))
                         break
                     else:
                         x += 32
-                #return FreeDirOffset
+                        #return FreeDirOffset
         else:
             sys.exit()
     except:
@@ -624,10 +610,12 @@ def WriteFAT(volume, FATOffset, clusterlist):
         #clusterlist.pop(0) #Remove first entry in the clusterlist as that is the "First Cluster"
         if (debug >= 1):
             print('\tCluster List (Modified): ' + str(clusterlist))
-        with open(volume, "rb+") as f:  #Opens the file for reading/writing http://www.tutorialspoint.com/python/python_files_io.htm
-            f.seek(FATOffset * 512 + ((FirstCluster - 1) * 4))  #Remember to multiply by 512 to get bytes
+        with open(volume,
+                  "rb+") as f:  #Opens the file for reading/writing http://www.tutorialspoint.com/python/python_files_io.htm
+            f.seek(FATOffset * BytesPerSector + ((FirstCluster - 1) * 4))  #Remember to multiply by 512 to get bytes
             if (debug >= 1):
-                print('\tSeeking to First Cluster Offset (Bytes): ' + str(FATOffset * 512 + ((FirstCluster - 1) * 4)))
+                print('\tSeeking to First Cluster Offset (Bytes): ' + str(
+                    FATOffset * BytesPerSector + ((FirstCluster - 1) * 4)))
             for cluster in clusterlist:
                 c = struct.pack("I", cluster)
                 f.write(c)
@@ -638,6 +626,7 @@ def WriteFAT(volume, FATOffset, clusterlist):
         status = False
     finally:
         return status, error
+
 
 def WriteData(volume, file, clusterlist):
     status = True
@@ -650,20 +639,21 @@ def WriteData(volume, file, clusterlist):
         #Write data off of Data Section - Each Cluster is 2048 bytes and it starts at Cluster 2
         #Each cluster is 2048 bytes
         #clusterlist.insert(0, FirstCluster) #Adding First Cluster back in
-        with open(volume, "rb+") as f:  #Opens the file for reading/writing http://www.tutorialspoint.com/python/python_files_io.htm
+        with open(volume,
+                  "rb+") as f:  #Opens the file for reading/writing http://www.tutorialspoint.com/python/python_files_io.htm
             if (debug >= 1):
                 print('Opening Volume: ' + str(volume))
             with open(file, "rb") as r:
                 if (debug >= 1):
                     print('\tReading file: ' + str(ntpath.basename(file)))
                 for cluster in clusterlist:  #New Offset is 2 (Cluster)
-                    seeker = (cluster * ClusterSize + (DataAreaStart * 512) - 2 * ClusterSize)
+                    seeker = (cluster * ClusterSize + (DataAreaStart * BytesPerSector) - 2 * ClusterSize)
                     f.seek(seeker)  #Each ClusterNum - 2 (Offset) * Bytes per cluster + (DataAreaStart * 512)
                     if (debug >= 1):
                         print('\tSeeking to Cluster (Bytes) [Cluster]: ' + '[' + str(cluster) + ']' + str(seeker))
                     chunk = r.read(ClusterSize)
                     if (debug >= 2):
-                           print('\tData Chunk Written: ' + str(chunk))
+                        print('\tData Chunk Written: ' + str(chunk))
                     f.write(chunk)
         if (debug >= 1):
             print('\tCompleted Writing Data.')
@@ -675,67 +665,67 @@ def WriteData(volume, file, clusterlist):
 
 
 def SearchDirectory(volume, file, write):
-        status = True
-        error = ''
-        global FileName
-        try:
-            if (debug >= 1):
-                print('Entering SearchDirectory:')
+    status = True
+    error = ''
+    global FileName
+    try:
+        if (debug >= 1):
+            print('Entering SearchDirectory:')
+        if (debug >= 2):
+            print('\tVolume passed in: ' + str(volume))
+            print('\tFile passed in: ' + str(file))
+            print('\tWrite Flag passed in: ' + str(write))
+        s1 = FileName
+        if (debug >= 2):
+            print('\tFilename to Search: ' + str(s1))
+        match = False
+        global FirstCluster
+        global FileSize
+        with open(volume, "rb") as f:
             if (debug >= 2):
-                print('\tVolume passed in: ' + str(volume))
-                print('\tFile passed in: ' + str(file))
-                print('\tWrite Flag passed in: ' + str(write))
-            s1 = FileName
-            if (debug >= 2):
-                print ('\tFilename to Search: ' + str(s1))
-            match = False
-            global FirstCluster
-            global FileSize
-            with open(volume, "rb") as f:
-                if (debug >= 2):
-                    print('\tSeeking to First Data Sector [Bytes]: ' + str(512 * FirstDataSector))
-                x = 0
-                while (True):
-                    f.seek(512 * FirstDataSector + x)
-                    bytes = f.read(32)  #Size of FAT32 Directory
-                    FirstChar = struct.unpack("b", bytes[0:1])[0]
-                    if not (FirstChar == 0x00): #Check for Unallocated Dir (This means exit!)
-                        if not (FirstChar == 0xe5): #Check for Unallocated Dir
-                            filename = bytes[0:11]
+                print('\tSeeking to First Data Sector [Bytes]: ' + str(BytesPerSector * FirstDataSector))
+            x = 0
+            while (True):
+                f.seek(BytesPerSector * FirstDataSector + x)
+                bytes = f.read(32)  #Size of FAT32 Directory
+                FirstChar = struct.unpack("b", bytes[0:1])[0]
+                if not (FirstChar == 0x00):  #Check for Unallocated Dir (This means exit!)
+                    if not (FirstChar == 0xe5):  #Check for Unallocated Dir
+                        filename = bytes[0:11]
+                        if (debug >= 3):
+                            print('\tFirst Character not 0xe5 or 0x00.')
+                            print('\tReading First 11 Bytes.')
+                            print('\tDirectory Value: ' + str(filename))
+                        if (filename.upper() == s1):
+                            match = True
                             if (debug >= 3):
-                                print('\tFirst Character not 0xe5 or 0x00.')
-                                print('\tReading First 11 Bytes.')
-                                print ('\tDirectory Value: ' + str(filename))
-                            if (filename.upper() == s1):
-                                match = True
-                                if (debug >= 3):
-                                    print ('\tFound Value That Matched: ' + str(s1))
-                                if not (write):
-                                    ba = bytearray(bytes[26:28])
-                                    ba += bytes[20:22]
-                                    if (debug >= 2):
-                                        print ('\tHigh/Low Bytes Bytearray [Length]: ' + '[' + str(len(ba)) + ']' + str(ba))
-                                    FirstCluster = struct.unpack("<i", ba)[0]
-                                    if (debug >= 1):
-                                        print ('\tFirst Cluster: ' + str(FirstCluster))
-                                    ba1 = bytearray(bytes[28:32])
-                                    FileSize = struct.unpack("<i", ba1)[0]
-                                    if (debug >= 2):
-                                        print ('\tFilesize Located in Directory [Bytes]: ' + str(FileSize))
-                                else:
-                                    return match
-                                break
+                                print('\tFound Value That Matched: ' + str(s1))
+                            if not (write):
+                                ba = bytearray(bytes[26:28])
+                                ba += bytes[20:22]
+                                if (debug >= 2):
+                                    print('\tHigh/Low Bytes Bytearray [Length]: ' + '[' + str(len(ba)) + ']' + str(ba))
+                                FirstCluster = struct.unpack("<i", ba)[0]
+                                if (debug >= 1):
+                                    print('\tFirst Cluster: ' + str(FirstCluster))
+                                ba1 = bytearray(bytes[28:32])
+                                FileSize = struct.unpack("<i", ba1)[0]
+                                if (debug >= 2):
+                                    print('\tFilesize Located in Directory [Bytes]: ' + str(FileSize))
                             else:
-                                x += 32
-                        else:
+                                return match
                             break
+                        else:
+                            x += 32
                     else:
                         break
-        except:
-            error = 'Error Searching Directory.'
-            status = False
-        finally:
-            return match
+                else:
+                    break
+    except:
+        error = 'Error Searching Directory.'
+        status = False
+    finally:
+        return match
 
 
 def SearchFAT(volume, FATOffset, FirstCluster):
@@ -753,83 +743,82 @@ def SearchFAT(volume, FATOffset, FirstCluster):
         ReadClusterList.append(nextcluster)
         y = 0
         with open(volume, "rb") as f:
-            f.seek(FATOffset * 512)
+            f.seek(FATOffset * BytesPerSector)
             bytes = f.read(TotalFAT32Bytes)
             if (debug >= 2):
-                print('\tSeeking to FAT Offset (Bytes): ' + str(FATOffset * 512))
+                print('\tSeeking to FAT Offset (Bytes): ' + str(FATOffset * BytesPerSector))
             while (y <= TotalFAT32Bytes):
                 y += 4
-                chunk = bytes[nextcluster*4:nextcluster*4+4]
+                chunk = bytes[nextcluster * 4:nextcluster * 4 + 4]
                 nextcluster = struct.unpack("<i", chunk)[0]
                 if (debug >= 3):
-                        print ('\tCluster Read [Length]: ' + '[' + str(len(chunk)) + ']' + str(chunk))
+                    print('\tCluster Read [Length]: ' + '[' + str(len(chunk)) + ']' + str(chunk))
                 if (debug >= 2):
-                    print ('\tNext Cluster: ' + str(nextcluster))
+                    print('\tNext Cluster: ' + str(nextcluster))
                 if (nextcluster != 268435455):
                     ReadClusterList.append(nextcluster)
                 else:
                     break
         if (debug >= 2):
-                    print('\tCluster List: ' + str(ReadClusterList))
-        #return ReadClusterList
+            print('\tCluster List: ' + str(ReadClusterList))
+            #return ReadClusterList
     except:
         error = 'Error: Cannot Search FAT.'
         status = False
     finally:
-            return status, error
+        return status, error
 
 
 def ReadData(volume, clusterlist, size):
-        status = True
-        error = ''
-        global FileData
-        try:
-            if (debug >= 1):
-                print('Entering ReadData:')
-            if (debug >= 2):
-                print('Volume Passed in: ' + str(volume))
-                print('Clusterlist Passed in: ' + str(clusterlist))
-                print('Size in: ' + str(size))
-            readchunk = bytearray()
-            with open(volume, "rb") as f:
-                for cluster in clusterlist:  #New Offset is 2 (Cluster)
-                    seeker = (cluster * ClusterSize + (DataAreaStart * 512) - 2 * ClusterSize)
-                    f.seek(seeker)  #Each ClusterNum - 2 (Offset) * Bytes per cluster + (DataAreaStart * 512)
-                    if (debug >= 2):
-                        print('\tSeeking to Cluster (Bytes) [Cluster]: ' + '[' + str(cluster) + ']' + str(seeker))
-                    readchunk += f.read(ClusterSize)
-                FileData = readchunk[0:size]
-                if (debug >= 3):
-                        print ('\tFile Data: ' + str(FileData))
-        except:
-            error = ('Error: Cannot Read Data.')
-            status = False
-        finally:
-            return status, error
+    status = True
+    error = ''
+    global FileData
+    try:
+        if (debug >= 1):
+            print('Entering ReadData:')
+        if (debug >= 2):
+            print('Volume Passed in: ' + str(volume))
+            print('Clusterlist Passed in: ' + str(clusterlist))
+            print('Size in: ' + str(size))
+        readchunk = bytearray()
+        with open(volume, "rb") as f:
+            for cluster in clusterlist:  #New Offset is 2 (Cluster)
+                seeker = (cluster * ClusterSize + (DataAreaStart * BytesPerSector) - 2 * ClusterSize)
+                f.seek(seeker)  #Each ClusterNum - 2 (Offset) * Bytes per cluster + (DataAreaStart * BytesPerSector)
+                if (debug >= 2):
+                    print('\tSeeking to Cluster (Bytes) [Cluster]: ' + '[' + str(cluster) + ']' + str(seeker))
+                readchunk += f.read(ClusterSize)
+            FileData = readchunk[0:size]
+            if (debug >= 3):
+                print('\tFile Data: ' + str(FileData))
+    except:
+        error = ('Error: Cannot Read Data.')
+        status = False
+    finally:
+        return status, error
 
 
 def WriteDatatoFile(file, filedata):
-        status = True
-        error = ''
-        global FileData
-        global MD5HashValue
-        try:
-            if (debug >= 1):
-                print('Entering WriteDatatoFile:')
-            if not (FileData == ''):
-                with open(file, "wb") as f:
-                    f.write(FileData)
-                md5 = hashlib.md5()
-                md5.update(FileData)
-                MD5HashValue = md5.hexdigest()
-            else:
-                error = 'File Data is Emtpy.'
-        except:
-            error = 'Error: Cannot Write Data.'
-            status = False
-        finally:
-            return status, error
-
+    status = True
+    error = ''
+    global FileData
+    global MD5HashValue
+    try:
+        if (debug >= 1):
+            print('Entering WriteDatatoFile:')
+        if not (FileData == ''):
+            with open(file, "wb") as f:
+                f.write(FileData)
+            md5 = hashlib.md5()
+            md5.update(FileData)
+            MD5HashValue = md5.hexdigest()
+        else:
+            error = 'File Data is Emtpy.'
+    except:
+        error = 'Error: Cannot Write Data.'
+        status = False
+    finally:
+        return status, error
 
 
 def WriteFSInfo(volume):
@@ -845,20 +834,19 @@ def WriteFSInfo(volume):
         global NextFreeCluster
 
         with open(volume, "rb+") as f:
-            f.seek(FSInfoSector * 512 + 488)
+            f.seek(FSInfoSector * BytesPerSector + 488)
             f.write(struct.pack("i", NumberOfFreeClusters))
             if (debug >= 2):
-                print ('Number of Free Clusters: ' + str(NumberOfFreeClusters))
-            f.seek(FSInfoSector * 512 + 492)
+                print('Number of Free Clusters: ' + str(NumberOfFreeClusters))
+            f.seek(FSInfoSector * BytesPerSector + 492)
             f.write(struct.pack("i", NextFreeCluster))
             if (debug >= 2):
-                print ('Next Free Cluster: ' + str(NextFreeCluster))
+                print('Next Free Cluster: ' + str(NextFreeCluster))
     except:
         error = 'Error: Cannot Write FSInfo.'
         status = True
     finally:
         return status, error
-
 
 
 def FlagValues(mask):
@@ -876,29 +864,33 @@ def signal_handler(signal, frame):
     print('Ctrl+C pressed. Exiting.')
     sys.exit(0)
 
+
 def Header(file):
-        print('')
-        print('+------------------------------------------------------------------------+')
-        print('|FAT32 File Fragmentation Utility                                        |')
-        print('+-------------------------------------------------------------------------')
-        print('|Author: Tahir Khan - tkhan9@gmu.edu                                     |')
-        print('+------------------------------------------------------------------------+')
-        print('  Date Run: ' + str(datetime.datetime.now()))
-        print('+------------------------------------------------------------------------+')
+    print('')
+    print('+------------------------------------------------------------------------+')
+    print('|FAT32 File Fragmentation Utility                                        |')
+    print('+-------------------------------------------------------------------------')
+    print('|Author: Tahir Khan - tkhan9@gmu.edu                                     |')
+    print('+------------------------------------------------------------------------+')
+    print('  Date Run: ' + str(datetime.datetime.now()))
+    print('+------------------------------------------------------------------------+')
+
 
 def Failed(error):
-        print('  * Error: ' + str(error))
-        print('+------------------------------------------------------------------------+')
-        print('| Failed.                                                                |')
-        print('+------------------------------------------------------------------------+')
-        sys.exit(1)
+    print('  * Error: ' + str(error))
+    print('+------------------------------------------------------------------------+')
+    print('| Failed.                                                                |')
+    print('+------------------------------------------------------------------------+')
+    sys.exit(1)
+
 
 def Completed(file):
-        print('| Completed.                                                             |')
-        print('+------------------------------------------------------------------------+')
-        print('  File: ' + str(ntpath.basename(file)) + ' - ' + 'MD5: ' + str(MD5HashValue))
-        print('+------------------------------------------------------------------------+')
-        sys.exit(0)
+    print('| Completed.                                                             |')
+    print('+------------------------------------------------------------------------+')
+    print('  File: ' + str(ntpath.basename(file)) + ' - ' + 'MD5: ' + str(MD5HashValue))
+    print('+------------------------------------------------------------------------+')
+    sys.exit(0)
+
 
 def usage():
     print('A FAT32 file system writer that forces fragmentation.')
@@ -933,8 +925,10 @@ def main(argv):
         parser.add_argument('-v', '--volume', help='The volume to write the fragmented file to.', required=True)
         parser.add_argument('-d', '--debug', help='The level of debugging.', required=False)
         rwgroup = parser.add_mutually_exclusive_group()
-        rwgroup.add_argument('-w', '--write', help='The file to write to the FAT32 volume.', action='store_true', required=False)
-        rwgroup.add_argument('-r', '--read', help='The file to read from FAT32 volume.', action='store_true', required=False)
+        rwgroup.add_argument('-w', '--write', help='The file to write to the FAT32 volume.', action='store_true',
+                             required=False)
+        rwgroup.add_argument('-r', '--read', help='The file to read from FAT32 volume.', action='store_true',
+                             required=False)
         parser.add_argument('--version', action='version', version='%(prog)s 1.0')
         args = parser.parse_args()
         if (args.read):
@@ -972,13 +966,13 @@ def main(argv):
             print('\tVolume: ' + str(volume))
             print('\tOperating System: ' + str(os))
             print('\tDebug Level: ' + str(debug))
-        #if (os == 'Windows'):
-        #    print ('Error: System not supported.')
-        #    sys.exit(1)
+            #if (os == 'Windows'):
+            #    print ('Error: System not supported.')
+            #    sys.exit(1)
 
 
 
-#=======================================================================================================================
+        #=======================================================================================================================
         Header(file)
         status, error = ReadBootSector(volume)
         if (status):
