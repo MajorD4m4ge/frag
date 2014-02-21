@@ -549,6 +549,7 @@ def WriteDirectory(file, volume, unallocatedoffset, firstcluster):
     status = True
     error = ''
     global FileName
+
     try:
         if (debug >= 1):
             print('Entering WriteDirectory:')
