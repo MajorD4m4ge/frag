@@ -74,6 +74,7 @@ ReadClusterList = []
 MD5HashValue = ''
 FileName = ''
 FileData = ''
+SkippedClusters = ''
 
 # </editor-fold>
 
@@ -421,6 +422,7 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
     global FirstCluster
     global TotalFreeClusters
     global NumberOfFreeClusters
+    global SkippedClusters
 
     try:
         if (debug >= 1):
@@ -485,6 +487,8 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
                 print('\tCluster List [Total]: ' + '[' + str(len(ChunkList)) + ']' + (str(ChunkList)))
 
             FirstCluster = ChunkList[0]
+            if (frag):
+                SkippedClusters = str(find_missing_range(ChunkList, FirstCluster, ChunkList[-1]))
             if (debug >= 2):
                 print('\tNumber of Free Clusters - Number Used (' + str(NumberOfFreeClusters) + ' - ' + str(
                     len(ChunkList)) + ')' + '= ' + str(NumberOfFreeClusters - len(ChunkList)))
@@ -497,13 +501,12 @@ def ReadFat(volume, FATOffset, chunks, fragments):  #Passes in the volume and ch
         error = ('Error: Cannot read FAT.')
         status = False
     finally:
-        print('Clusters skipped: ' + str(find_missing_range(ChunkList, FirstCluster, ChunkList[-1])))
         return status, error
 
 
-def find_missing_range(my_numbers, range_min, range_max):
-    expected_range = set(range(range_min, range_max + 1))
-    return expected_range - set(my_numbers)
+def find_missing_range(numbers, min, max):
+    expected_range = set(range(min, max + 1))
+    return sorted(expected_range - set(numbers))
 
 
 def numbers_as_ranges(numbers):
@@ -917,6 +920,15 @@ def Completed(file):
     print('+------------------------------------------------------------------------+')
     sys.exit(0)
 
+def CompletedFrag(file):
+    print('| Completed.                                                             |')
+    print('+------------------------------------------------------------------------+')
+    print('  File: ' + str(ntpath.basename(file)) + ' - ' + 'MD5: ' + str(MD5HashValue))
+    print('  --> Start Cluster:    ' + str(FirstCluster))
+    print('  --> End Cluster:      ' + str(ChunkList[-1]))
+    print('  --> Skipped Clusters: ' + str(SkippedClusters))
+    print('+------------------------------------------------------------------------+')
+    sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
 
@@ -1041,6 +1053,7 @@ def main(argv):
                 status, error = WriteData(volume, file, ChunkList)
                 if (status):
                     print('| + Writing Data.                                                        |')
+
                 else:
                     print('| - Writing Data.                                                        |')
                     Failed(error)
@@ -1056,7 +1069,10 @@ def main(argv):
                 else:
                     print('| - Updating FSInfo.                                                     |')
                     Failed(error)
-                Completed(file)
+                if not (fragments == 0):
+                    CompletedFrag(file)
+                else:
+                    Completed(file)
             else:
                 print('Error: Filesize too Small.')
                 sys.exit(1)
