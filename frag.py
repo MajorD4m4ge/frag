@@ -1,11 +1,5 @@
 __author__ = 'khanta'
-#TODO Check different filesizes and files
-#TODO Check filename reading in directory
-#TODO TimeDate Stamp MS and Accessed Day
-#TODO Error checking on Volume
-#TODO Windows won't work.
-#TODO Add marking clusters as bad
-#TODO Rework command line args
+#TODO Get it work on windows --> http://stackoverflow.com/questions/7135398/is-it-possible-to-get-writing-access-to-raw-devices-using-python-with-windows
 #Create Disk  --> dd if=/dev/zero of=512MB.dd bs=1M count=512
 #Create FAT32 --> mkdosfs -n 512MB -F 32 -v 512MB.dd
 import os
@@ -77,6 +71,13 @@ FileData = ''
 SkippedClusters = ''
 
 # </editor-fold>
+
+def GetDriveFormat(os, volume):
+    if os == 'posix':
+        drive = volume
+    elif os == 'Windows':
+        drive = '\\.\%s:' % volume
+    return drive
 
 
 def HashMD5(file, block_size=2 ** 20):
@@ -697,6 +698,7 @@ def SearchDirectory(volume, file, write):
     status = True
     error = ''
     global FileName
+
     try:
         if (debug >= 1):
             print('Entering SearchDirectory:')
@@ -937,6 +939,7 @@ def main(argv):
     try:
         global debug
         global MD5HashValue
+
         #parse the command-line arguments
         fragments = int(0)
         write = False
@@ -948,6 +951,7 @@ def main(argv):
         parser.add_argument('-n', '--number', help='The number of fragments to create.', type=int, required=False)
         parser.add_argument('-v', '--volume', help='The volume to write the fragmented file to.', required=True)
         parser.add_argument('-d', '--debug', help='The level of debugging.', required=False)
+
         rwgroup = parser.add_mutually_exclusive_group()
         rwgroup.add_argument('-w', '--write', help='The file to write to the FAT32 volume.', action='store_true',
                              required=False)
@@ -959,6 +963,12 @@ def main(argv):
             read = args.read
         else:
             read = False
+        if _platform == "linux" or _platform == "linux2":
+            os = 'Linux'
+        elif _platform == "darwin":
+            os = 'Mac'
+        elif _platform == "win32":
+            os = 'Windows'
         if (args.file):
             file = args.file
             if not (read):
@@ -967,21 +977,17 @@ def main(argv):
                 MD5HashValue = HashMD5(file)
         if (args.volume):
             volume = args.volume
+            if (os == 'Windows'):
+                GetDriveFormat(os, volume)
         if (args.number):
             fragments = args.number
             fragments = int(fragments)
         if (args.volume):
             volume = args.volume
-
         if (args.debug):
             debug = args.debug
             debug = int(debug)
-        if _platform == "linux" or _platform == "linux2":
-            os = 'Linux'
-        elif _platform == "darwin":
-            os = 'Mac'
-        elif _platform == "win32":
-            os = 'Windows'
+
         if (debug >= 1):
             print('Entered main:')
             print('\tFilename to Fragment: ' + str(file))
@@ -1004,7 +1010,6 @@ def main(argv):
         else:
             print('| - Reading Boot Sector.                                                 |')
             Failed(error)
-
         if not (read):
             if (MinFileLength(file, fragments)):
                 status, error = FileNamePad(ntpath.basename(file))
@@ -1103,6 +1108,7 @@ def main(argv):
                 print('| - Writing Data.                                                        |')
                 Failed(error)
             Completed(file)
+
 
 
     except IOError:
