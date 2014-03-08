@@ -71,6 +71,13 @@ FileData = ''
 SkippedClusters = ''
 
 # </editor-fold>
+class NotValidBootSector(Exception):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return repr(self.value)
+
 
 def GetDriveFormat(os, volume):
     if os == 'posix':
@@ -249,7 +256,7 @@ def ReadBootSector(volume):
             bytes = f.read(BootSectorSize)
             BytesPerSector = struct.unpack("<H", bytes[11:13])[0]
             if (BytesPerSector not in ValidBytesPerSector):
-                print('Error: This is not a FAT32 drive.')
+                raise NotValidBootSector('Not a Valid Boot Sector')
             SectorsPerCluster = struct.unpack("<b", bytes[13:14])[0]
             ReservedSectorCount = struct.unpack("<H", bytes[14:16])[0]
             NumberOfFATs = struct.unpack("<b", bytes[16:17])[0]
@@ -292,6 +299,9 @@ def ReadBootSector(volume):
     except IOError:
         status = False
         error = 'Volume ' + str(volume) + ' does not exist.'
+    except NotValidBootSector:
+        status = False
+        error = 'Volume ' + str(volume) + ' contains an invalid boot sector.'
     except:
         status = False
         error = 'Cannot read Boot Sector.'
@@ -977,8 +987,8 @@ def main(argv):
                 MD5HashValue = HashMD5(file)
         if (args.volume):
             volume = args.volume
-            if (os == 'Windows'):
-                GetDriveFormat(os, volume)
+            #if (os == 'Windows'):
+            #    GetDriveFormat(os, volume)
         if (args.number):
             fragments = args.number
             fragments = int(fragments)
@@ -1006,73 +1016,73 @@ def main(argv):
         Header(file)
         status, error = ReadBootSector(volume)
         if (status):
-            print('| + Reading Boot Sector.                                                 |')
+            print('| [+] Reading Boot Sector.                                               |')
         else:
-            print('| - Reading Boot Sector.                                                 |')
+            print('| [-] Reading Boot Sector.                                               |')
             Failed(error)
         if not (read):
             if (MinFileLength(file, fragments)):
                 status, error = FileNamePad(ntpath.basename(file))
                 if (status):
-                    print('| + Verifying Filename.                                                  |')
+                    print('| [+] Verifying Filename.                                                |')
                 else:
-                    print('| - Verifying Filename.                                                  |')
+                    print('| [-] Verifying Filename.                                                |')
                     Failed(error)
                 status, error = GetFSInfo(volume)
                 if (status):
-                    print('| + Reading FSInfo.                                                      |')
+                    print('| [+] Reading FSInfo.                                                    |')
                 else:
-                    print('| - Reading FSInfo.                                                      |')
+                    print('| [-] Reading FSInfo.                                                    |')
                     Failed(error)
                 status, error = GetChunks(file)
                 if (status):
-                    print('| + Reading Data.                                                        |')
+                    print('| [+] Reading Data.                                                      |')
                 else:
-                    print('| - Reading Data.                                                        |')
+                    print('| [-] Reading Data.                                                      |')
                     Failed(error)
                 status, error = ReadFat(volume, ReservedSectorCount, TotalChunks, fragments)
                 if (status):
-                    print('| + Reading FAT.                                                         |')
+                    print('| [+] Reading FAT.                                                       |')
                 else:
-                    print('| - Reading FAT.                                                         |')
+                    print('| [-] Reading FAT.                                                       |')
                     Failed(error)
                 status, error = ReadDirectory(volume, file)
                 if (status):
-                    print('| + Reading Directory.                                                   |')
+                    print('| [+] Reading Directory.                                                 |')
                 else:
-                    print('| - Reading Directory.                                                   |')
+                    print('| [-] Reading Directory.                                                 |')
                     Failed(error)
 
                 status, error = WriteDirectory(file, volume, FreeDirOffset, FirstCluster)
                 if (status):
-                    print('| + Writing Directory.                                                   |')
+                    print('| [+] Writing Directory.                                                 |')
                 else:
-                    print('| - Writing Directory.                                                   |')
+                    print('| [-] Writing Directory.                                                 |')
                     Failed(error)
                 status, error = WriteFAT(volume, ReservedSectorCount, ChunkList)
                 if (status):
-                    print('| + Writing FAT.                                                         |')
+                    print('| [+] Writing FAT.                                                       |')
                 else:
-                    print('| - Writing FAT.                                                         |')
+                    print('| [-] Writing FAT.                                                       |')
                     Failed(error)
                 status, error = WriteData(volume, file, ChunkList)
                 if (status):
-                    print('| + Writing Data.                                                        |')
+                    print('| [+] Writing Data.                                                      |')
 
                 else:
-                    print('| - Writing Data.                                                        |')
+                    print('| [-] Writing Data.                                                      |')
                     Failed(error)
                 status, error = GetNextFreeCluster(volume)
                 if (status):
-                    print('| + Getting Next Free Cluster.                                           |')
+                    print('| [+] Getting Next Free Cluster.                                         |')
                 else:
-                    print('| - Getting Next Free Cluster.                                           |')
+                    print('| [-] Getting Next Free Cluster.                                         |')
                     Failed(error)
                 status, error = WriteFSInfo(volume)
                 if (status):
-                    print('| + Updating FSInfo.                                                     |')
+                    print('| [+] Updating FSInfo.                                                   |')
                 else:
-                    print('| - Updating FSInfo.                                                     |')
+                    print('| [-] Updating FSInfo.                                                   |')
                     Failed(error)
                 if not (fragments == 0):
                     CompletedFrag(file)
@@ -1085,27 +1095,27 @@ def main(argv):
             status, error = FileNamePad(ntpath.basename(file))
             match = SearchDirectory(volume, ntpath.basename(file), write)
             if (match):
-                print('| + Searching Directory.                                                 |')
+                print('| [+] Searching Directory.                                               |')
             else:
-                print('| + Searching Directory.                                                 |')
+                print('| [-] Searching Directory.                                               |')
                 Failed('File does not exist in the directory')
             status, error = SearchFAT(volume, ReservedSectorCount, FirstCluster)
             if (status):
-                print('| + Searching FAT.                                                       |')
+                print('| [+] Searching FAT.                                                     |')
             else:
-                print('| - Searching FAT.                                                       |')
+                print('| [-] Searching FAT.                                                     |')
                 Failed(error)
             status, error = ReadData(volume, ReadClusterList, FileSize)
             if (status):
-                print('| + Reading Data.                                                        |')
+                print('| [+] Reading Data.                                                      |')
             else:
-                print('| - Reading Data.                                                        |')
+                print('| [-] Reading Data.                                                      |')
                 Failed(error)
             status, error = WriteDatatoFile(file, FileData)
             if (status):
-                print('| + Writing Data.                                                        |')
+                print('| [+] Writing Data.                                                      |')
             else:
-                print('| - Writing Data.                                                        |')
+                print('| [-] Writing Data.                                                      |')
                 Failed(error)
             Completed(file)
 
